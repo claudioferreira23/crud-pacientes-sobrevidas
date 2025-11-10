@@ -19,6 +19,7 @@ target/
 *.iml
 *.ipr
 /data/
+/src/main/resources/pacientes.csv
 
 ### NetBeans ###
 /nbproject/private/
