@@ -9,18 +9,21 @@ import com.sobrevidas.crud_pacientes.mapper.PacienteMapper;
 import com.sobrevidas.crud_pacientes.entity.Paciente;
 import com.sobrevidas.crud_pacientes.repository.PacienteRepository;
 import jakarta.transaction.Transactional;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class PacienteService {
 
     private final PacienteRepository repository;
     private final PacienteMapper mapper;
+
+    public PacienteService(PacienteRepository repository, PacienteMapper mapper) {
+        this.repository = repository;
+        this.mapper = mapper;
+    }
 
     public List<PacienteResponseDTO> listarTodosPacientes() {
         return repository.findAll()

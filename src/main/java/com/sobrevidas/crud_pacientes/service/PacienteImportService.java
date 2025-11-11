@@ -2,7 +2,6 @@ package com.sobrevidas.crud_pacientes.service;
 
 import com.sobrevidas.crud_pacientes.entity.Paciente;
 import com.sobrevidas.crud_pacientes.repository.PacienteRepository;
-import lombok.RequiredArgsConstructor;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVRecord;
 import org.slf4j.Logger;
@@ -17,11 +16,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 public class PacienteImportService implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(PacienteImportService.class);
+
     private final PacienteRepository repository;
+
+    public PacienteImportService(PacienteRepository repository) {
+        this.repository = repository;
+    }
 
     @Override
     public void run(String... args) throws Exception {

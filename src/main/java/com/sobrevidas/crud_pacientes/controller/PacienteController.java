@@ -13,7 +13,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,10 +22,13 @@ import java.util.List;
 @Tag(name = "Pacientes", description = "Endpoints para o gerenciamento de pacientes")
 @RestController
 @RequestMapping("pacientes")
-@RequiredArgsConstructor
 public class PacienteController {
 
     private final PacienteService service;
+
+    public PacienteController(PacienteService service) {
+        this.service = service;
+    }
 
     @Operation(summary = "Lista todos os pacientes", description = "Retorna uma lista de todos os pacientes.")
     @ApiResponse(responseCode = "200", description = "Lista de pacientes retornada com sucesso")
