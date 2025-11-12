@@ -75,13 +75,6 @@ public class PacienteService {
         Paciente pacienteExistente = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Paciente não encontrado com id: " + id));
 
-        if (dto.cpf() != null &&
-                !dto.cpf().equals(pacienteExistente.getCpf()) &&
-                repository.existsByCpf(dto.cpf())) {
-
-            throw new ResourceAlreadyExistsException("CPF já cadastrado para outro paciente.");
-        }
-
         mapper.patchEntityFromDto(dto, pacienteExistente);
 
         Paciente pacienteSalvo = repository.save(pacienteExistente);
