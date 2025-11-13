@@ -204,18 +204,17 @@ class PacienteControllerTest {
     @Test
     @DisplayName("PATCH /pacientes/{id} - Deve retornar 200 OK quando atualização parcial for bem-sucedida")
     void atualizarPacienteParcial_DeveRetornar200OK_QuandoAtualizacaoValida() throws Exception {
-        PacientePatchDTO patchDTO = new PacientePatchDTO("00011122233",
-                null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null,
-                null, null, null, null, null);
+
+        PacientePatchDTO patchDTO = new PacientePatchDTO(true, false, true);
+
         PacienteResponseDTO atualizado = new PacienteResponseDTO(
-                1L, "12345678901", "Paciente Atualizado", responseDTO.dataNascimento(),
-                responseDTO.nomeMae(), responseDTO.cep(), responseDTO.endereco(),
-                responseDTO.numEndereco(), responseDTO.complemento(), responseDTO.bairro(),
-                responseDTO.cidade(), responseDTO.estado(), responseDTO.telefoneCelular(),
-                responseDTO.telefoneResponsavel(), responseDTO.email(), responseDTO.sexo(),
-                responseDTO.numCartaoSus(), responseDTO.ehTabagista(), responseDTO.ehEtilista(),
-                responseDTO.temLesaoSuspeita(), responseDTO.participaSmartMonitor()
+                1L, responseDTO.cpf(), responseDTO.nome(),
+                responseDTO.dataNascimento(), responseDTO.nomeMae(),
+                responseDTO.cep(), responseDTO.endereco(), responseDTO.numEndereco(),
+                responseDTO.complemento(), responseDTO.bairro(), responseDTO.cidade(),
+                responseDTO.estado(), responseDTO.telefoneCelular(), responseDTO.telefoneResponsavel(),
+                responseDTO.email(), responseDTO.sexo(), responseDTO.numCartaoSus(),
+                true, false, true, responseDTO.participaSmartMonitor()
         );
 
         when(service.atualizarPacienteParcial(eq(1L), any(PacientePatchDTO.class)))
@@ -225,47 +224,36 @@ class PacienteControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(patchDTO)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.nome", is("Paciente Atualizado")));
+                .andExpect(jsonPath("$.ehTabagista", is(true)))
+                .andExpect(jsonPath("$.temLesaoSuspeita", is(true)))
+                .andExpect(jsonPath("$.ehEtilista", is(false)));
+    }
+
+    @Test
+    @DisplayName("PATCH /pacientes/{id} - Deve retornar 400 quando algum campo obrigatório for nulo")
+    void atualizarPacienteParcial_DeveRetornar400_QuandoCampoObrigatorioNulo() throws Exception {
+        PacientePatchDTO patchDTO = new PacientePatchDTO(null, true, false);
+
+        mockMvc.perform(patch("/pacientes/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(patchDTO)))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
     @DisplayName("PATCH /pacientes/{id} - Deve retornar 404 Not Found quando paciente não existe")
     void atualizarPacienteParcial_DeveRetornar404NotFound_QuandoPacienteNaoExiste() throws Exception {
+
         when(service.atualizarPacienteParcial(eq(99L), any(PacientePatchDTO.class)))
                 .thenThrow(new ResourceNotFoundException("Paciente não encontrado com id: 99"));
 
+        PacientePatchDTO patchDTO = new PacientePatchDTO(false, false, false);
+
         mockMvc.perform(patch("/pacientes/99")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                new PacientePatchDTO(
-                                        null, null, null, null, null, null,
-                                        null, null, null, null, null,
-                                        null, null, null, null, null,
-                                        null, null, null, null
-                                )
-                        )))
+                        .content(objectMapper.writeValueAsString(patchDTO)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message", is("Paciente não encontrado com id: 99")));
-    }
-
-    @Test
-    @DisplayName("PATCH /pacientes/{id} - Deve retornar 409 Conflict quando CPF já está cadastrado em outro paciente")
-    void atualizarPacienteParcial_DeveRetornar409Conflict_QuandoCpfDuplicado() throws Exception {
-        when(service.atualizarPacienteParcial(eq(1L), any(PacientePatchDTO.class)))
-                .thenThrow(new ResourceAlreadyExistsException("CPF já cadastrado para outro paciente."));
-
-        mockMvc.perform(patch("/pacientes/1")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                new PacientePatchDTO(
-                                        null, null, null, null, null, null,
-                                        null, null, null, null, null,
-                                        null, null, null, null, null,
-                                        null, null, null, null
-                                )
-                        )))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message", is("CPF já cadastrado para outro paciente.")));
     }
 
     @Test

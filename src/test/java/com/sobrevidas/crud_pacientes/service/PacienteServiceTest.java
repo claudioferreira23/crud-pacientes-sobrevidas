@@ -179,38 +179,36 @@ class PacienteServiceTest {
     @Test
     @DisplayName("Atualiza paciente parcialmente com sucesso (PATCH)")
     void atualizarPacienteParcial_AtualizaComSucesso() {
-        patchDTO = new PacientePatchDTO(null, "Nome Atualizado Patch", null,
-                null, null, null, null, null, null, null, null,
-                "65999999999", null, null, null, null, null,
-                null, null, null);
+        patchDTO = new PacientePatchDTO(
+                false,
+                false,
+                true
+        );
 
         when(repository.findById(1L)).thenReturn(Optional.of(paciente));
         when(repository.save(paciente)).thenReturn(paciente);
         when(mapper.toResponseDTO(paciente)).thenReturn(responseDTO);
 
-        service.atualizarPacienteParcial(1L, patchDTO);
+        PacienteResponseDTO resultado = service.atualizarPacienteParcial(1L, patchDTO);
 
+        assertNotNull(resultado);
         verify(repository, times(1)).findById(1L);
         verify(mapper, times(1)).patchEntityFromDto(patchDTO, paciente);
         verify(repository, times(1)).save(paciente);
     }
 
     @Test
-    @DisplayName("atualizarPacienteParcial lança ResourceAlreadyExistsException quando CPF já existe (PATCH)")
-    void atualizarPacienteParcial_LancaResourceAlreadyExistsException_QuandoCpfJaExisteEmOutro() {
-        patchDTO = new PacientePatchDTO("00011122233",
-                null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null,
-                null, null, null, null);
+    @DisplayName("atualizarPacienteParcial lança ResourceNotFoundException quando ID não existe (PATCH)")
+    void atualizarPacienteParcial_LancaResourceNotFoundException_QuandoIdNaoExiste() {
+        patchDTO = new PacientePatchDTO(false, true, false);
 
-        when(repository.findById(1L)).thenReturn(Optional.of(paciente));
-        when(repository.existsByCpf("00011122233")).thenReturn(true);
+        when(repository.findById(99L)).thenReturn(Optional.empty());
 
-        ResourceAlreadyExistsException exception = assertThrows(ResourceAlreadyExistsException.class, () -> {
-            service.atualizarPacienteParcial(1L, patchDTO);
+        assertThrows(ResourceNotFoundException.class, () -> {
+            service.atualizarPacienteParcial(99L, patchDTO);
         });
 
-        assertEquals("CPF já cadastrado para outro paciente.", exception.getMessage());
+        verify(mapper, never()).patchEntityFromDto(any(), any());
         verify(repository, never()).save(any());
     }
 
