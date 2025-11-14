@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -31,6 +32,7 @@ public class PacienteController {
     @Operation(summary = "Lista todos os pacientes", description = "Retorna uma lista de todos os pacientes.")
     @ApiResponse(responseCode = "200", description = "Lista de pacientes retornada com sucesso")
     @GetMapping
+    @PreAuthorize("hasRole('USER')")
     public ResponseEntity<List<PacienteResponseDTO>> listarTodosPacientes() {
         return ResponseEntity.ok(service.listarTodosPacientes());
     }
@@ -42,6 +44,7 @@ public class PacienteController {
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('USER')")
     public ResponseEntity<PacienteResponseDTO> buscarPacientePorId(
             @Parameter(description = "ID do paciente a ser buscado", required = true, example = "1")
             @PathVariable Long id) {
@@ -57,6 +60,7 @@ public class PacienteController {
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
     @PostMapping
+    @PreAuthorize("hasRole('USER')")
     public ResponseEntity<PacienteResponseDTO> salvarPaciente(
             @Parameter(description = "Objeto do paciente a ser criado", required = true)
             @Valid @RequestBody PacienteRequestDTO pacienteDTO) {
@@ -77,6 +81,7 @@ public class PacienteController {
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('USER')")
     public ResponseEntity<PacienteResponseDTO> atualizarPaciente(
             @Parameter(description = "ID do paciente a ser atualizado", required = true, example = "1")
             @PathVariable Long id,
@@ -99,6 +104,7 @@ public class PacienteController {
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
     @PatchMapping("/{id}")
+    @PreAuthorize("hasRole('USER')")
     public ResponseEntity<PacienteResponseDTO> atualizarPacienteParcial(
             @Parameter(description = "ID do paciente a ser atualizado", required = true, example = "1")
             @PathVariable Long id,
@@ -117,6 +123,7 @@ public class PacienteController {
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('USER')")
     public ResponseEntity<Void> removerPaciente(
             @Parameter(description = "ID do paciente a ser removido", required = true, example = "1")
             @PathVariable Long id) {
