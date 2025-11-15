@@ -139,6 +139,7 @@ public class PacienteController {
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> removerPaciente(
             @Parameter(description = "ID do paciente a ser removido", required = true, example = "1")
             @PathVariable Long id) {
