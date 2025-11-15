@@ -1,5 +1,8 @@
 package com.sobrevidas.crud_pacientes.auth;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -16,6 +19,11 @@ import org.springframework.web.client.RestTemplate;
 @RequestMapping("/token")
 public class TokenController {
 
+    @Operation(summary = "Faz a requisição de token para o keycloak e retorna um token")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Solicitação de token feita com sucesso"),
+            @ApiResponse(responseCode = "401", description = "Conexão com o keycloak foi recusada")
+    })
     @PostMapping("/")
     public ResponseEntity<String> token(@RequestBody User user) {
 

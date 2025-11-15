@@ -31,7 +31,11 @@ public class PacienteController {
     private final PacienteService service;
 
     @Operation(summary = "Lista todos os pacientes", description = "Retorna uma lista de todos os pacientes.")
-    @ApiResponse(responseCode = "200", description = "Lista de pacientes retornada com sucesso")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Lista de pacientes retornada com sucesso"),
+            @ApiResponse(responseCode = "401", description = "Usuário não autorizado"),
+            @ApiResponse(responseCode = "403", description = "Usuário não tem a permissão necessária para efetuar a operação")
+    })
     @GetMapping
     public ResponseEntity<List<PacienteResponseDTO>> listarTodosPacientes() {
         return ResponseEntity.ok(service.listarTodosPacientes());
@@ -40,6 +44,8 @@ public class PacienteController {
     @Operation(summary = "Busca um paciente por ID")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Paciente encontrado com sucesso"),
+            @ApiResponse(responseCode = "401", description = "Usuário não autorizado"),
+            @ApiResponse(responseCode = "403", description = "Usuário não tem a permissão necessária para efetuar a operação"),
             @ApiResponse(responseCode = "404", description = "Paciente não encontrado",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
@@ -55,6 +61,8 @@ public class PacienteController {
             @ApiResponse(responseCode = "201", description = "Paciente criado com sucesso"),
             @ApiResponse(responseCode = "400", description = "Dados inválidos na requisição (erro de validação)",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Usuário não autorizado"),
+            @ApiResponse(responseCode = "403", description = "Usuário não tem a permissão necessária para efetuar a operação"),
             @ApiResponse(responseCode = "409", description = "Conflito de dados (ex: CPF já cadastrado)",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
@@ -73,6 +81,8 @@ public class PacienteController {
             @ApiResponse(responseCode = "200", description = "Paciente atualizado com sucesso"),
             @ApiResponse(responseCode = "400", description = "Dados inválidos na requisição (erro de validação)",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Usuário não autorizado"),
+            @ApiResponse(responseCode = "403", description = "Usuário não tem a permissão necessária para efetuar a operação"),
             @ApiResponse(responseCode = "404", description = "Paciente não encontrado",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
             @ApiResponse(responseCode = "409", description = "Conflito de dados (ex: CPF já cadastrado para outro paciente)",
@@ -95,6 +105,8 @@ public class PacienteController {
             @ApiResponse(responseCode = "200", description = "Paciente atualizado com sucesso"),
             @ApiResponse(responseCode = "400", description = "Dados inválidos na requisição (erro de validação de formato)",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Usuário não autorizado"),
+            @ApiResponse(responseCode = "403", description = "Usuário não tem a permissão necessária para efetuar a operação"),
             @ApiResponse(responseCode = "404", description = "Paciente não encontrado",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
             @ApiResponse(responseCode = "409", description = "Conflito de dados (ex: CPF já cadastrado para outro paciente)",
@@ -115,6 +127,8 @@ public class PacienteController {
     @Operation(summary = "Remove um paciente por ID")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Paciente removido com sucesso (Sem conteúdo)"),
+            @ApiResponse(responseCode = "401", description = "Usuário não autorizado"),
+            @ApiResponse(responseCode = "403", description = "Usuário não tem a permissão necessária para efetuar a operação"),
             @ApiResponse(responseCode = "404", description = "Paciente não encontrado",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
