@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -50,6 +51,18 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiErrorResponse> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        ApiErrorResponse error = new ApiErrorResponse(
+                Instant.now(),
+                HttpStatus.FORBIDDEN.value(),
+                HttpStatus.FORBIDDEN.getReasonPhrase(),
+                "Acesso negado. Você não tem permissão para realizar esta operação.",
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
     }
 
     @ExceptionHandler(Exception.class)
