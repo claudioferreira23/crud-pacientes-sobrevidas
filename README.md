@@ -2,7 +2,7 @@
 
 > Projeto desenvolvido em Novembro de 2025. Criado como um estudo aprofundado sobre a criação de APIs REST com o ecossistema Spring, focado em boas práticas de arquitetura, testes e documentação.
 
-API REST completa para gerenciamento de pacientes (CRUD). O projeto implementa uma arquitetura em camadas robusta, separando responsabilidades com DTOs (Data Transfer Objects), Mappers (MapStruct), validação de entrada (`@Valid`) e um tratamento de exceções global (`@RestControllerAdvice`) para respostas de erro padronizadas (400, 404, 409).
+API REST completa para gerenciamento de pacientes (CRUD). O projeto implementa uma arquitetura em camadas robusta, separando responsabilidades com DTOs (Data Transfer Objects), Mappers (MapStruct), validação de entrada (`@Valid`) e um tratamento de exceções global (`@RestControllerAdvice`) para respostas de erro padronizadas.
 
 ---
 ## ✨ Features
@@ -14,6 +14,7 @@ API REST completa para gerenciamento de pacientes (CRUD). O projeto implementa u
 - [x] **Validação Robusta:** Validação de dados de entrada em todos os DTOs (`@Valid`, `@NotBlank`, `@Pattern`, etc.).
 - [x] **Tratamento de Exceções Centralizado:** Uso de `@RestControllerAdvice` para retornar respostas de erro padronizadas.
 - [x] **Documentação Interativa:** API 100% documentada com **Swagger (SpringDoc)**, incluindo schemas de erro.
+- [x] **Endpoints Protegidos:** Segurança em todos os endpoints com autenticação e autorização via Keycloak.
 - [x] **Testes de Unidade e Integração:** Cobertura de testes para a camada de Serviço (`PacienteServiceTest`) e para a camada de API/Controller (`PacienteControllerTest`) usando JUnit 5 e Mockito.
 - [x] **Ambiente Containerizado:** Banco de dados PostgreSQL 16 gerenciado via Docker Compose.
 
@@ -39,20 +40,21 @@ docker-compose up -d
 
 - A API estará disponível em `http://localhost:8080`.
 - A documentação do Swagger estará em `http://localhost:8080/swagger-ui.html`.
+- O console de administração do Keycloak estará em `http://localhost:8081`
 
 ---
 ## 🔌 Endpoints da API
 
-A documentação completa, com exemplos de **request** e **response**, está disponível em `http://localhost:8080/swagger-ui.html`
+Os endpoints são protegidos e exigem um token de acesso JWT válido obtido via Keycloak.
 
-| Verbo HTTP | Endpoint | Descrição |
-| :--- | :--- | :--- |
-| `GET` | `/pacientes` | Lista todos os pacientes cadastrados. |
-| `GET` | `/pacientes/{id}` | Busca um paciente pelo seu ID. |
-| `POST` | `/pacientes` | Cadastra um novo paciente.
-| `PUT` | `/pacientes/{id}` | Atualiza um paciente (requer o objeto completo). |
-| `PATCH` | `/pacientes/{id}` | Atualiza parcialmente um paciente (apenas campos fornecidos). |
-| `DELETE` | `/pacientes/{id}` | Remove um paciente. |
+| Verbo HTTP | Endpoint | Descrição | Acesso |
+| :--- | :--- | :--- |:----------|
+| `GET` | `/pacientes` | Lista todos os pacientes cadastrados. | Protegido |
+| `GET` | `/pacientes/{id}` | Busca um paciente pelo seu ID. | Protegido |
+| `POST` | `/pacientes` | Cadastra um novo paciente. | Protegido |
+| `PUT` | `/pacientes/{id}` | Atualiza um paciente (requer o objeto completo). | Protegido |
+| `PATCH` | `/pacientes/{id}` | Atualiza parcialmente um paciente (apenas campos fornecidos). | Protegido |
+| `DELETE` | `/pacientes/{id}` | Remove um paciente. | Protegido |
 
 ---
 ## 👨‍💻 Autor
@@ -72,5 +74,6 @@ A documentação completa, com exemplos de **request** e **response**, está dis
   <img src="https://img.shields.io/badge/Docker-blue?style=for-the-badge&logo=docker" alt="Docker">
   <img src="https://img.shields.io/badge/PostgreSQL-16-blue?style=for-the-badge&logo=postgresql" alt="PostgreSQL 16">
   <img src="https://img.shields.io/badge/JUnit5-green?style=for-the-badge&logo=junit5" alt="JUnit 5">
+  <img src="https://img.shields.io/badge/Keycloak-red?style=for-the-badge&logo=keycloak" alt="Keycloak">
   <img src="https://img.shields.io/badge/Swagger-blue?style=for-the-badge&logo=swagger" alt="Swagger">
 </div>
