@@ -20,6 +20,7 @@ target/
 *.ipr
 /data/
 /src/main/resources/pacientes.csv
+.env
 
 ### NetBeans ###
 /nbproject/private/
