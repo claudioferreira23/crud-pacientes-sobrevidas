@@ -36,11 +36,13 @@ docker-compose up -d
 # 4. Execute a aplicação Spring Boot
 # (Pode levar um momento na primeira vez para baixar as dependências)
 ./mvnw spring-boot:run
+
+OBS: O arquivo 'pacientes.csv' deve estar dentro da pasta 'resources'.
 ```
 
 - A API estará disponível em `http://localhost:8080`.
 - A documentação do Swagger estará em `http://localhost:8080/swagger-ui.html`.
-- O console de administração do Keycloak estará em `http://localhost:8081`
+- O console de administração do Keycloak estará em `http://localhost:8081`.
 
 ---
 ## 🔌 Endpoints da API
