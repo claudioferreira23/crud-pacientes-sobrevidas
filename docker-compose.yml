@@ -1,13 +1,13 @@
-version: '3.8'
 services:
   postgres:
+    env_file: ./.env
     image: postgres:16
     container_name: postgres_sobrevidas
     restart: always
     environment:
-      POSTGRES_DB: sobrevidas_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 1234
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -16,17 +16,18 @@ services:
       - keycloak-network
 
   keycloak:
+    env_file: ./.env
     image: quay.io/keycloak/keycloak:26.4.5
     container_name: keycloak_sobrevidas
     restart: always
     environment:
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/sobrevidas_db
-      KC_DB_USERNAME: postgres
-      KC_DB_PASSWORD: 1234
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
 
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
     command:
       - start-dev
     ports:
