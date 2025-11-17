@@ -6,6 +6,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -38,7 +41,7 @@ public class GlobalExceptionHandler {
                         .collect(Collectors.toMap(
                                 error -> error.getField(),
                                 error -> error.getDefaultMessage(),
-                                (a, b) -> a // caso raro de duplicados
+                                (a, b) -> a
                         ));
 
         ApiErrorResponse response = new ApiErrorResponse(
@@ -55,6 +58,20 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiErrorResponse> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || authentication instanceof AnonymousAuthenticationToken) {
+            ApiErrorResponse error = new ApiErrorResponse(
+                    Instant.now(),
+                    HttpStatus.UNAUTHORIZED.value(),
+                    HttpStatus.UNAUTHORIZED.getReasonPhrase(),
+                    "Acesso negado. Você precisa estar autenticado para realizar esta operação.",
+                    request.getRequestURI()
+            );
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+        }
+
         ApiErrorResponse error = new ApiErrorResponse(
                 Instant.now(),
                 HttpStatus.FORBIDDEN.value(),
