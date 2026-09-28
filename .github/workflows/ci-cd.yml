@@ -1,0 +1,450 @@
+# Pipeline de CI/CD — API de Pacientes (Spring Boot 3.5 / Java 21 / Maven)
+#
+# Fluxo de branches (GitFlow simplificado):
+#   branch de trabalho --PR--> dev --PR--> main
+#
+# Fluxo dos jobs:
+#   lint ─┐
+#         ├─> test ─> build (jar) ─> docker (imagem GHCR) ─┬─> deploy-staging ─> smoke-staging
+# codeql ─┘                                                 │   (push na dev)     (curl + OWASP ZAP)
+#                                                           └─> deploy-production (push na main,
+#                                                                aprovação manual)
+#   check-source-branch e dependency-review: só em pull requests.
+#
+# Em pull requests roda apenas CI (validação da branch de origem, lint, CodeQL,
+# dependency review, testes e build do jar/imagem sem publicar). Nunca há deploy.
+# Documentação completa: docs/PIPELINE_CI_CD.md
+name: CI/CD
+
+# Gatilhos: push e PR para dev e main + execução manual pela aba Actions.
+# Branches de trabalho (feature/, fix/...) são validadas pelo PR para a dev.
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+  workflow_dispatch:
+
+# Permissões mínimas por padrão (somente leitura do código).
+# Jobs que precisam de mais (CodeQL, publicar imagem) pedem explicitamente.
+permissions:
+  contents: read
+
+# Concorrência: uma execução por ref (refs/heads/dev, refs/heads/main ou
+# refs/pull/N/merge), então dev e main nunca se bloqueiam. Em PRs, um novo
+# commit cancela a execução anterior; em dev/main nunca cancelamos (poderia
+# interromper um deploy). Os jobs de deploy têm grupos próprios, separados por
+# ambiente (deploy-staging / deploy-production).
+concurrency:
+  group: ci-cd-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Variáveis comuns a todos os jobs
+env:
+  JAVA_VERSION: '21'
+  JAVA_DISTRIBUTION: 'temurin'
+  # -B: modo batch (logs limpos); sem barra de progresso de download
+  MAVEN_ARGS: '-B --no-transfer-progress'
+  REGISTRY: ghcr.io
+
+jobs:
+  # 0) VALIDAR BRANCH DE ORIGEM — só em pull requests. A main só aceita PR
+  #    vindo da dev. PRs para a dev podem vir de qualquer branch.
+  #    Configure este job como "required status check" na proteção da main.
+  check-source-branch:
+    name: Validar branch de origem
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # head_ref vem do autor do PR: é lido via variável de ambiente (nunca
+      # interpolado direto no script) para evitar injeção de comandos.
+      - name: Conferir origem do PR
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          echo "PR: ${HEAD_REF} -> ${BASE_REF}"
+          if [ "$BASE_REF" = "main" ] && [ "$HEAD_REF" != "dev" ]; then
+            echo "::error title=Branch de origem inválida::A main só recebe Pull Request vindo da dev (origem atual: '${HEAD_REF}')."
+            echo "Fluxo correto:"
+            echo "  1. Crie sua branch de trabalho a partir da dev (ex.: feature/minha-mudanca)."
+            echo "  2. Abra um PR da sua branch para a dev e faça o merge após o CI passar."
+            echo "  3. Valide a mudança no ambiente de staging (deploy automático da dev)."
+            echo "  4. Abra um PR da dev para a main para liberar a produção."
+            echo "Feche este PR e abra um novo com destino dev."
+            exit 1
+          fi
+          echo "Origem válida."
+
+  # 1) LINT — verificação estática de estilo/bugs simples com Checkstyle
+  #    Regras em config/checkstyle/checkstyle.xml
+  lint:
+    name: Lint (Checkstyle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Instala o JDK 21 e faz cache do repositório Maven (~/.m2/repository)
+      - name: Configurar Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Executar Checkstyle
+        run: ./mvnw checkstyle:check
+
+  # 2) CODEQL — análise estática de segurança (SAST) do código Java.
+  #    Resultados aparecem em Security > Code scanning.
+  codeql:
+    name: SAST (CodeQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      security-events: write # necessário para enviar o relatório SARIF
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # build-mode: none -> analisa o código Java sem precisar compilar
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          languages: java-kotlin
+          build-mode: none
+          queries: security-extended
+
+      - name: Executar análise CodeQL
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          category: /language:java-kotlin
+
+  # 3) DEPENDENCY REVIEW — só em pull requests: bloqueia PRs que adicionam
+  #    dependências com vulnerabilidades conhecidas de severidade alta+.
+  dependency-review:
+    name: Revisão de dependências
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+
+  # 4) TESTES — verificação dinâmica: JUnit 5 + Mockito + teste de contexto
+  #    Spring (@SpringBootTest), que precisa de um PostgreSQL real.
+  test:
+    name: Testes automatizados
+    needs: [lint]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Banco PostgreSQL 16 efêmero (mesma versão do docker-compose.yml).
+    # A senha abaixo só existe dentro deste container descartável do CI.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: sobrevidas_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    # Sobrescrevem spring.datasource.* do application.properties
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/sobrevidas_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configurar Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      # "verify" compila e roda todos os testes. Checkstyle já rodou no job lint.
+      - name: Executar testes (mvn verify)
+        run: ./mvnw verify -Dcheckstyle.skip=true
+
+      # Relatórios do Surefire ficam disponíveis mesmo quando os testes falham
+      - name: Publicar relatórios de teste
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relatorios-testes
+          path: target/surefire-reports/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # 5) BUILD — gera o jar executável e o publica como artefato do workflow
+  build:
+    name: Build (jar)
+    needs: [test, codeql]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configurar Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      # Testes e lint já foram validados nos jobs anteriores
+      - name: Empacotar aplicação
+        run: ./mvnw package -DskipTests -Dcheckstyle.skip=true
+
+      - name: Enviar jar como artefato
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: app-jar
+          path: target/crud-pacientes-*.jar
+          retention-days: 7
+          if-no-files-found: error
+
+  # 6) DOCKER — baixa o jar do job build, gera a imagem e (somente em push na
+  #    dev ou na main) publica no GitHub Container Registry (ghcr.io).
+  #    Tags por origem:
+  #      dev  -> dev-<sha>  e latest-dev   (usada em staging)
+  #      main -> <sha>      e latest       (usada em produção)
+  #      PR   -> pr-<número> (apenas build local, sem publicar)
+  docker:
+    name: Imagem Docker
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write # publicar no GHCR usando o GITHUB_TOKEN
+    env:
+      # true somente em push na dev ou na main
+      PUBLICAR: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main') }}
+    outputs:
+      # Referência imutável da imagem (tag com o SHA do commit) usada nos deploys
+      image: ${{ steps.ref.outputs.image }}
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Reaproveita exatamente o jar testado/gerado no job anterior
+      - name: Baixar jar do job build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: app-jar
+          path: target/
+
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Login apenas quando formos publicar (push na dev ou na main)
+      - name: Login no GHCR
+        if: env.PUBLICAR == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Gera as tags de acordo com a branch de origem e os labels OCI.
+      # "enable" liga cada tag só na branch correspondente.
+      - name: Metadados da imagem
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          tags: |
+            type=sha,format=long,prefix=dev-,enable=${{ github.ref == 'refs/heads/dev' }}
+            type=raw,value=latest-dev,enable=${{ github.ref == 'refs/heads/dev' }}
+            type=sha,format=long,prefix=,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=pr
+
+      # Em PR (ou execução manual): apenas constrói, validando o Dockerfile.
+      # Em push na dev/main: publica. Cache de camadas no GitHub Actions (gha).
+      - name: Build e push da imagem
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: ${{ env.PUBLICAR == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Referência imutável repassada aos deploys: dev-<sha> na dev, <sha> na
+      # main. O nome do registro precisa estar em minúsculas.
+      - name: Definir referência da imagem
+        id: ref
+        run: |
+          if [ "$GITHUB_REF" = "refs/heads/dev" ]; then
+            TAG="dev-${GITHUB_SHA}"
+          else
+            TAG="${GITHUB_SHA}"
+          fi
+          echo "image=${REGISTRY}/${GITHUB_REPOSITORY,,}:${TAG}" >> "$GITHUB_OUTPUT"
+
+  # 7) DEPLOY STAGING — automático após CI verde, só em push na dev
+  #    (ou seja, após o merge de um PR para a dev).
+  #    Usa os secrets/variáveis do environment "staging".
+  deploy-staging:
+    name: Deploy — staging
+    needs: [docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read # a VM baixa a imagem usando o GITHUB_TOKEN deste job
+    environment:
+      name: staging
+      url: ${{ vars.APP_URL }}
+    # Nunca dois deploys de staging ao mesmo tempo (o segundo espera).
+    # Grupo exclusivo de staging: não bloqueia nem é bloqueado pela produção.
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    outputs:
+      # Repassa a URL para o job de testes pós-deploy
+      app_url: ${{ vars.APP_URL }}
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Deploy via SSH: docker pull + docker run na VM de staging.
+      # Sem SSH_HOST cadastrado, roda em modo simulado (ver script).
+      - name: Deploy via SSH
+        run: bash .github/scripts/deploy-ssh.sh
+        env:
+          IMAGE: ${{ needs.docker.outputs.image }}
+          CONTAINER_NAME: crud-pacientes-staging
+          APP_PORT: ${{ vars.APP_PORT }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_USERNAME: ${{ secrets.DATABASE_USERNAME }}
+          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          KEYCLOAK_ISSUER_URI: ${{ vars.KEYCLOAK_ISSUER_URI }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 8) TESTES PÓS-DEPLOY EM STAGING — verificação dinâmica no ambiente real:
+  #    smoke test com curl + varredura DAST passiva com OWASP ZAP (baseline).
+  #    Só em push na dev (a condição repete a do deploy por clareza).
+  smoke-staging:
+    name: Smoke test + DAST (staging)
+    needs: [deploy-staging]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APP_URL: ${{ needs.deploy-staging.outputs.app_url }}
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Verificar URL de staging
+        id: alvo
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "::warning::Variável APP_URL não definida no environment staging — testes pós-deploy ignorados."
+            echo "ativo=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ativo=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Aguarda a API subir e confere /api-docs (200), /swagger-ui.html (200)
+      # e /pacientes sem token (401)
+      - name: Smoke test (curl)
+        if: steps.alvo.outputs.ativo == 'true'
+        run: bash .github/scripts/smoke-test.sh "$APP_URL"
+
+      # Varredura passiva do OWASP ZAP. fail_action=false: alertas viram
+      # relatório (artefato), sem bloquear; ajuste para true quando o time
+      # tiver tratado os alertas iniciais.
+      - name: OWASP ZAP baseline scan
+        if: steps.alvo.outputs.ativo == 'true'
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
+        with:
+          target: ${{ env.APP_URL }}
+          fail_action: false
+          allow_issue_writing: false
+          artifact_name: zap-relatorio-staging
+
+  # 9) DEPLOY PRODUÇÃO — só em push na main, o que só acontece após o merge
+  #    do PR dev -> main (código que já passou por staging). O environment
+  #    "production" deve ter "Required reviewers" (aprovação manual).
+  deploy-production:
+    name: Deploy — production
+    needs: [docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
+    # Grupo exclusivo de produção: independente do grupo de staging
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Imagem <sha> gerada a partir da main (mesmo código validado em staging)
+      - name: Deploy via SSH
+        run: bash .github/scripts/deploy-ssh.sh
+        env:
+          IMAGE: ${{ needs.docker.outputs.image }}
+          CONTAINER_NAME: crud-pacientes-production
+          APP_PORT: ${{ vars.APP_PORT }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_USERNAME: ${{ secrets.DATABASE_USERNAME }}
+          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          KEYCLOAK_ISSUER_URI: ${{ vars.KEYCLOAK_ISSUER_URI }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Verificação rápida pós-deploy em produção (sem ZAP, para não gerar
+      # tráfego de varredura no ambiente real)
+      - name: Smoke test em produção
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "::warning::Variável APP_URL não definida no environment production — smoke test ignorado."
+            exit 0
+          fi
+          bash .github/scripts/smoke-test.sh "$APP_URL"
