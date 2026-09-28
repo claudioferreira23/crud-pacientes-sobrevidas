@@ -1,0 +1,3 @@
+# Envia ao contexto do Docker apenas o jar gerado pelo Maven
+*
+!target/crud-pacientes-*.jar
